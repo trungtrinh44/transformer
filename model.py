@@ -199,7 +199,7 @@ class EncoderLayer(object):
                 outputs = tf.nn.dropout(outputs, rate=self.dropout)
             outputs += inputs
             outputs = self.layer_norm_1.call(outputs)
-            #
+            # Position-wise feed forward
             inputs = outputs = tf.reshape(outputs, (bs*sl, self.ndims))
             outputs = self.feed_forward.call(inputs)
             if self.is_training and self.dropout > 0.0:
