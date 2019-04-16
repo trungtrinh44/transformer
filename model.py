@@ -63,7 +63,7 @@ class MultiheadAttention(object):
                     weights['w_v'] = tf.get_variable(name='w_v', shape=(v_shape[-1], self.v_dims))
                     self.head_params.append(weights)
 
-    def call(self, Q, K, V, mask):
+    def call(self, Q, K, V, mask=None):
         with tf.variable_scope(self.name, reuse=self.reuse):
             att_heads = []
             for i in range(self.nheads):
@@ -176,21 +176,38 @@ class EncoderLayer(object):
         with tf.variable_scope(self.name, reuse=self.reuse):
             self.mult_att = MultiheadAttention(self.nheads, self.att_dims, self.att_dims, self.is_training, self.reuse)
             self.mult_att.build(input_shape, input_shape, input_shape)
+
+            self.layer_norm_1 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
+            self.layer_norm_1.build(tf.TensorShape((None, None, self.ndims)))
+
             self.feed_forward = FeedForward([
                 {'size': self.ff_ndims, 'activation': tf.nn.relu},
                 {'size': self.ndims}
-            ])
+            ], is_training=self.is_training, reuse=self.reuse)
+            self.feed_forward.build(tf.TensorShape((None, self.ndims)))
+
+            self.layer_norm_2 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
+            self.layer_norm_2.build(tf.TensorShape((None, None, self.ndims)))
 
     def call(self, inputs):
         with tf.variable_scope(self.name, reuse=self.reuse):
-            att_heads = []
-            for i in range(self.nheads):
-                with tf.variable_scope('head_{}'.format(i), reuse=self.reuse):
-                    weights = self.head_params[i]
-                    Q = tf.matmul(inputs, weights['w_q'], name='Q')
-                    K = tf.matmul(inputs, weights['w_k'], name='K')
-                    V = tf.matmul(inputs, weights['w_v'], name='V')
-                    self.att_heads.append(scaled_dot_attention(Q, K, V))
+            input_shape = tf.shape(inputs)
+            bs, sl = input_shape[0], input_shape[1]
+            # Multi-Head Attention
+            outputs = self.mult_att.call(inputs, inputs, inputs)
+            if self.is_training and self.dropout > 0.0:
+                outputs = tf.nn.dropout(outputs, rate=self.dropout)
+            outputs += inputs
+            outputs = self.layer_norm_1.call(outputs)
+            #
+            inputs = outputs = tf.reshape(outputs, (bs*sl, self.ndims))
+            outputs = self.feed_forward.call(inputs)
+            if self.is_training and self.dropout > 0.0:
+                outputs = tf.nn.dropout(outputs, rate=self.dropout)
+            outputs += inputs
+            outputs = tf.reshape(outputs, (bs, sl, self.ndims))
+            outputs = self.layer_norm_2.call(outputs)
+        return outputs
 
 
 class Encoder(object):
@@ -212,9 +229,19 @@ class Encoder(object):
         self.is_training = is_training
         self.dropout = dropout
         self.name = name
-        self.att_dims = ndims // nheads
-        self.is_built = False
         self.reuse = reuse
 
-    # def build(self):
-    #     with tf.variabe_scope(self.name, reuse=self.reuse):
+    def build(self, input_shape):
+        with tf.variable_scope(self.name, reuse=self.reuse):
+            self.layers = []
+            for i in range(self.nlayers):
+                layer = EncoderLayer(self.ndims, self.nheads, self.ff_ndims, self.dropout, self.is_training, self.reuse, 'EncoderLayer_{}'.format(i))
+                layer.build(input_shape)
+                self.layers.append(layer)
+
+    def call(self, inputs):
+        with tf.variable_scope(self.name, reuse=self.reuse):
+            outputs = inputs
+            for layer in self.layers:
+                outputs = layer.call(outputs)
+        return outputs
