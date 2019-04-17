@@ -144,6 +144,7 @@ class LayerNorm(object):
         with tf.variable_scope(self.name, reuse=self.reuse):
             inputs_shape = inputs.shape
             inputs_rank = inputs_shape.ndims
+            begin_norm_axis = self.begin_norm_axis
             if begin_norm_axis < 0:
                 begin_norm_axis = inputs_rank + begin_norm_axis
             norm_axes = list(range(begin_norm_axis, inputs_rank))
