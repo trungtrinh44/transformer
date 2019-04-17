@@ -181,7 +181,7 @@ class EncoderLayer(object):
             self.mult_att = MultiheadAttention(self.nheads, self.att_dims, self.att_dims, self.is_training, self.reuse)
             self.mult_att.build(input_shape, input_shape, input_shape)
 
-            self.layer_norm_1 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
+            self.layer_norm_1 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse, name='LayerNorm_1')
             self.layer_norm_1.build(ts)
 
             self.feed_forward = PositionwiseFF([
@@ -190,7 +190,7 @@ class EncoderLayer(object):
             ], is_training=self.is_training, reuse=self.reuse)
             self.feed_forward.build(ts)
 
-            self.layer_norm_2 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
+            self.layer_norm_2 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse, name='LayerNorm_2')
             self.layer_norm_2.build(ts)
 
     def call(self, inputs, mask):
