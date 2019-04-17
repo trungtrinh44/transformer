@@ -1,5 +1,7 @@
-import tensorflow as tf
+from collections import namedtuple
+
 import numpy as np
+import tensorflow as tf
 
 
 def scaled_dot_attention(Q, K, V, mask=None):
@@ -210,6 +212,8 @@ class EncoderLayer(object):
 
 
 class TransformerEncoder(object):
+    Config = namedtuple('TransformerEncoderConfig', ['ndims', 'nheads', 'nlayers', 'ff_ndims', 'vocab_size', 'maxlen', 'dropout'])
+
     def __init__(self, ndims=512, nheads=8, nlayers=6, ff_ndims=2048, vocab_size=2**13, maxlen=128, dropout=0.5, is_training=True, reuse=tf.AUTO_REUSE, name='TransformerEncoder'):
         """
             ndims: number of dimensions
@@ -261,4 +265,28 @@ class TransformerEncoder(object):
                 mask = tf.sequence_mask(seq_lens, dtype=tf.float32)
                 for layer in self.layers:
                     outputs = layer.call(outputs, mask)
+        return outputs
+
+
+class TransformerEncoderClassifier(TransformerEncoder):
+    Config = namedtuple('TransformerEncoderClassifierConfig', TransformerEncoder.Config._fields + ('n_classes',))
+
+    def __init__(self, n_classes, ndims=512, nheads=8, nlayers=6, ff_ndims=2048, vocab_size=2**13, maxlen=128, dropout=0.5, is_training=True, reuse=tf.AUTO_REUSE, name='TransformerEncoderClassifier'):
+        super().__init__(ndims, nheads, nlayers, ff_ndims, vocab_size, maxlen, dropout, is_training, reuse, name)
+        self.n_classes = n_classes
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        with tf.variable_scope(self.name, reuse=self.reuse):
+            with tf.variable_scope('Classifier', reuse=self.reuse):
+                self.cls_weight = {}
+                self.cls_weight['W'] = tf.get_variable(name='W', shape=(self.ndims, self.n_classes))
+                self.cls_weight['b'] = tf.get_variable(name='b', shape=(self.n_classes,))
+
+    def call(self, inputs, seq_lens):
+        outputs = super().call(inputs, seq_lens)
+        with tf.variable_scope(self.name, reuse=self.reuse):
+            with tf.variable_scope('Classifier', reuse=self.reuse):
+                # use the output at the first time step for classification
+                outputs = tf.nn.xw_plus_b(outputs[:, 0], self.cls_weight['W'], self.cls_weight['b'])
         return outputs
