@@ -34,6 +34,6 @@ def get_batch_classifier(data, batch_size, shuffle):
         seq_lens = np.array([len(x) for x, _ in batch], dtype=np.int32)
         labels = np.array([x for _, x in batch], dtype=np.int32)
         indices = np.zeros(shape=(len(batch), seq_lens.max()), dtype=np.int32)
-        for seq, _ in batch:
-            indices[:len(seq)] = seq
+        for idx, (seq, _) in enumerate(batch):
+            indices[idx][:len(seq)] = seq
         yield (indices, seq_lens), labels
