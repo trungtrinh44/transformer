@@ -90,9 +90,9 @@ class ClassifyTrainer(object):
         """
         t0 = time.time()
         for (indices, seq_lens), labels in train_iter:
-            _, loss, acc, step = self.session.run([self.train_op, self.train_loss, self.train_acc, self.global_step],
-                                                  feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: labels})
-            self.logger.info("Step {:4d}: loss: {:05.5f}, acc: {:05.5f}, time {:05.2f}".format(step, loss, acc, time.time()-t0))
+            _, loss, acc, step, lr = self.session.run([self.train_op, self.train_loss, self.train_acc, self.global_step, self.lr],
+                                                      feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: labels})
+            self.logger.info("Step {:4d}: loss: {:05.5f}, acc: {:05.5f}, lr: {:05.5f}, time {:05.2f}".format(step, loss, acc, lr, time.time()-t0))
             if step % self.trainer_config.save_freq == 0:
                 self.train_saver.save(self.session, os.path.join(self.train_path, 'model.cpkt'), step)
 
