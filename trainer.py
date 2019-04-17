@@ -12,7 +12,7 @@ def get_learning_rate(step_num, warmup_steps, d_model):
     step_num = tf.cast(step_num, tf.float32)
     d_model = tf.convert_to_tensor(d_model, dtype=tf.float32)
     warmup_steps = tf.convert_to_tensor(warmup_steps, dtype=tf.float32)
-    return d_model * tf.minimum(tf.pow(step_num, -0.5), step_num * tf.pow(warmup_steps, -1.5))
+    return tf.pow(d_model, -0.5) * tf.minimum(tf.pow(step_num, -0.5), step_num * tf.pow(warmup_steps, -1.5))
 
 
 def get_optimizer(learning_rate):
