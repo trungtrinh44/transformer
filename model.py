@@ -15,7 +15,7 @@ def scaled_dot_attention(Q, K, V, mask=None):
     d_k = Q.shape[-1].value
     att = tf.matmul(Q, tf.transpose(K, (0, 2, 1))) / d_k  # [batch_size, query_length, key_value_length]
     if mask is not None:
-        att = att * mask + (1 - mask) * 1e-20
+        att = att * mask + (1 - mask) * -1e20
     att = tf.nn.softmax(att, axis=-1)  # [batch_size, query_length, key_value_length]
     att = tf.matmul(att, V)  # [batch_size, query_lengh, value_dim]
     return att
@@ -265,6 +265,7 @@ class TransformerEncoder(object):
                 outputs = embedding + pe
             with tf.variable_scope('EncoderLayers', reuse=self.reuse):
                 mask = tf.sequence_mask(seq_lens, dtype=tf.float32)
+                mask = tf.expand_dims(mask, axis=1)
                 for layer in self.layers:
                     outputs = layer.call(outputs, mask)
         return outputs
