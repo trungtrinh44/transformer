@@ -86,30 +86,30 @@ class ClassifyTrainer(object):
 
     def train_step(self, train_iter):
         """
-            train_iter: iterator that return ((indices, seq_lens), label) to feed to the model
+            train_iter: iterator that return ((indices, seq_lens), labels) to feed to the model
         """
         t0 = time.time()
-        for (indices, seq_lens), label in train_iter:
+        for (indices, seq_lens), labels in train_iter:
             _, loss, acc, step = self.session.run([self.train_op, self.train_loss, self.train_acc, self.global_step],
-                                                  feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: label})
+                                                  feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: labels})
             self.logger.info("Step {:4d}: loss: {:05.5f}, acc: {:05.5f}, time {:05.2f}".format(step, loss, acc, time.time()-t0))
             if step % self.trainer_config.save_freq == 0:
                 self.train_saver.save(self.session, os.path.join(self.train_path, 'model.cpkt'), step)
 
     def test_step(self, test_iter):
         """
-            test_iter: iterator that return ((indices, seq_lens), label) to feed to the model
+            test_iter: iterator that return ((indices, seq_lens), labels) to feed to the model
         """
         t0 = time.time()
         total_loss, total_acc, total_len = 0.0, 0.0, 0
         step = self.session.run(self.global_step)
         self.test_saver.save(self.session, os.path.join(self.test_path, 'model.cpkt'), step)
-        for (indices, seq_lens), label in test_iter:
+        for (indices, seq_lens), labels in test_iter:
             loss, acc = self.session.run([self.test_loss, self.test_acc],
-                                         feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: label})
-            total_loss += loss * len(label)
-            total_acc += acc * len(label)
-            total_len += len(label)
+                                         feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: labels})
+            total_loss += loss * len(labels)
+            total_acc += acc * len(labels)
+            total_len += len(labels)
             self.logger.info("Evaluate step: loss: {:05.5f}, acc: {:05.5f}, time {:05.2f}".format(loss, acc, time.time()-t0))
         total_loss /= total_len
         total_acc /= total_len
