@@ -63,11 +63,11 @@ class ClassifyTrainer(object):
 
         # Build acc value
         self.train_acc = tf.reduce_mean(tf.cast(
-            tf.equal(y, tf.argmax(output_train, axis=1)),
+            tf.equal(y, tf.argmax(output_train, axis=1, output_type=tf.int32)),
             dtype=tf.float32
         ))
         self.test_acc = tf.reduce_mean(tf.cast(
-            tf.equal(y, tf.argmax(output_test, axis=1)),
+            tf.equal(y, tf.argmax(output_test, axis=1, output_type=tf.int32)),
             dtype=tf.float32
         ))
         self.train_op = optimizer.minimize(train_loss)
