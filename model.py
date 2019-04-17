@@ -60,9 +60,9 @@ class MultiheadAttention(object):
             for i in range(self.nheads):
                 with tf.variable_scope('head_{}'.format(i), reuse=self.reuse):
                     weights = {}
-                    weights['w_q'] = tf.get_variable(name='w_q', shape=(q_shape[-1], self.qk_dims))
-                    weights['w_k'] = tf.get_variable(name='w_k', shape=(k_shape[-1], self.qk_dims))
-                    weights['w_v'] = tf.get_variable(name='w_v', shape=(v_shape[-1], self.v_dims))
+                    weights['w_q'] = tf.get_variable(name='w_q', shape=(1, q_shape[-1], self.qk_dims))
+                    weights['w_k'] = tf.get_variable(name='w_k', shape=(1, k_shape[-1], self.qk_dims))
+                    weights['w_v'] = tf.get_variable(name='w_v', shape=(1, v_shape[-1], self.v_dims))
                     self.head_params.append(weights)
 
     def call(self, Q, K, V, mask=None):
@@ -71,9 +71,9 @@ class MultiheadAttention(object):
             for i in range(self.nheads):
                 with tf.variable_scope('head_{}'.format(i), reuse=self.reuse):
                     weights = self.head_params[i]
-                    Q_i = tf.matmul(Q, weights['w_q'], name='Q')
-                    K_i = tf.matmul(K, weights['w_k'], name='K')
-                    V_i = tf.matmul(V, weights['w_v'], name='V')
+                    Q_i = tf.nn.conv1d(Q, weights['w_q'], 1, 'VALID', name='Q')
+                    K_i = tf.nn.conv1d(K, weights['w_k'], 1, 'VALID', name='K')
+                    V_i = tf.nn.conv1d(V, weights['w_v'], 1, 'VALID', name='V')
                     head = scaled_dot_attention(Q_i, K_i, V_i, mask)
                     att_heads.append(head)
             att_heads = tf.concat(att_heads, axis=-1, name='att_heads')
