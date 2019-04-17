@@ -22,7 +22,7 @@ def get_optimizer(learning_rate):
 class ClassifyTrainer(object):
     Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test', 'save_freq'])
 
-    def __init__(self, model_config: TransformerEncoderClassifier.Config, trainer_config: ClassifyTrainer.Config, name='ClassifyTrainer'):
+    def __init__(self, model_config, trainer_config, name='ClassifyTrainer'):
         self.model_config = model_config
         self.trainer_config = trainer_config
         self.name = name

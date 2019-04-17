@@ -164,7 +164,7 @@ class EncoderLayer(object):
             reuse: reuse variable or not
             name: model name
         """
-        assert ndims % nheads == 0, "ndims must be divisible by nheads"
+        assert ndims % nheads == 0, "ndims ({}) must be divisible by nheads ({})".format(ndims, nheads)
         self.ndims = ndims
         self.nheads = nheads
         self.ff_ndims = ff_ndims
