@@ -12,7 +12,7 @@ def scaled_dot_attention(Q, K, V, mask=None):
         mask: broadcastable to [batch_size, query_length, key_value_length] use in the decoder to mask subsequent tokens.
     """
     assert Q.shape[-1] == K.shape[-1], "Q and K must have a last dimension of same size"
-    d_k = Q.shape[-1]
+    d_k = Q.shape[-1].value
     att = tf.matmul(Q, tf.transpose(K, (0, 2, 1))) / d_k  # [batch_size, query_length, key_value_length]
     if mask is not None:
         att = att * mask + (1 - mask) * 1e-20
