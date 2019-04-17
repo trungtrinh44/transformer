@@ -198,14 +198,14 @@ class EncoderLayer(object):
             # Multi-Head Attention
             outputs = self.mult_att.call(inputs, inputs, inputs, mask)
             if self.is_training and self.dropout > 0.0:
-                outputs = tf.nn.dropout(outputs, rate=self.dropout)
+                outputs = tf.nn.dropout(outputs, keep_prob=1-self.dropout)
             outputs += inputs
             outputs = self.layer_norm_1.call(outputs)
             # Position-wise feed forward
             inputs = outputs
             outputs = self.feed_forward.call(inputs)
             if self.is_training and self.dropout > 0.0:
-                outputs = tf.nn.dropout(outputs, rate=self.dropout)
+                outputs = tf.nn.dropout(outputs, keep_prob=1-self.dropout)
             outputs += inputs
             outputs = self.layer_norm_2.call(outputs)
         return outputs
