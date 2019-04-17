@@ -174,20 +174,22 @@ class EncoderLayer(object):
 
     def build(self, input_shape):
         with tf.variable_scope(self.name, reuse=self.reuse):
+            ts = tf.TensorShape((None, None, self.ndims))
+
             self.mult_att = MultiheadAttention(self.nheads, self.att_dims, self.att_dims, self.is_training, self.reuse)
             self.mult_att.build(input_shape, input_shape, input_shape)
 
             self.layer_norm_1 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
-            self.layer_norm_1.build(tf.TensorShape((None, None, self.ndims)))
+            self.layer_norm_1.build(ts)
 
             self.feed_forward = PositionwiseFF([
                 {'size': self.ff_ndims, 'activation': tf.nn.relu},
                 {'size': self.ndims}
             ], is_training=self.is_training, reuse=self.reuse)
-            self.feed_forward.build(tf.TensorShape((None, self.ndims)))
+            self.feed_forward.build(ts)
 
             self.layer_norm_2 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
-            self.layer_norm_2.build(tf.TensorShape((None, None, self.ndims)))
+            self.layer_norm_2.build(ts)
 
     def call(self, inputs):
         with tf.variable_scope(self.name, reuse=self.reuse):
