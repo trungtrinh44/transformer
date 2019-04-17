@@ -1,9 +1,11 @@
 import os
+import time
 from collections import namedtuple
 
 import tensorflow as tf
 
 from model import TransformerEncoderClassifier
+from utils import get_logger
 
 
 def get_learning_rate(step_num, warmup_steps, d_model):
@@ -18,7 +20,7 @@ def get_optimizer(learning_rate):
 
 
 class ClassifyTrainer(object):
-    Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test'])
+    Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test', 'save_freq'])
 
     def __init__(self, model_config: TransformerEncoderClassifier.Config, trainer_config: ClassifyTrainer.Config, name='ClassifyTrainer'):
         self.model_config = model_config
@@ -29,7 +31,8 @@ class ClassifyTrainer(object):
         path = self.path = self.trainer_config.path
         train_path = self.train_path = os.path.join(path, 'train')
         self.test_path = os.path.join(path, 'test')
-
+        self.log_path = os.path.join(path, 'log')
+        self.logger = get_logger(self.log_path)
         # Create session
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
@@ -40,6 +43,10 @@ class ClassifyTrainer(object):
             x = self.x = tf.placeholder(shape=(None, None), dtype=tf.int32, name='x')
             y = self.y = tf.placeholder(shape=(None,), dtype=tf.int32, name='y')
             seq_lens = self.seq_lens = tf.placeholder(shape=(None,), dtype=tf.int32, name='seq_lens')
+            # Build optimizer
+            global_step = self.global_step = tf.Variable(0, trainable=False, name='global_step')
+            lr = self.lr = get_learning_rate(global_step, self.trainer_config.warmup_steps, self.model_config.ndims)
+            optimizer = get_optimizer(lr)
         # Build train model
         model_train = self.model_train = TransformerEncoderClassifier(*self.model_config, is_training=True, reuse=False)
         model_train.build(x.shape)
@@ -55,12 +62,14 @@ class ClassifyTrainer(object):
         self.test_loss = tf.losses.sparse_softmax_cross_entropy(y, output_test)
 
         # Build acc value
-        
-
-        # Build optimizer
-        global_step = self.global_step = tf.Variable(0, trainable=False, name='global_step')
-        lr = self.lr = get_learning_rate(global_step, self.trainer_config.warmup_steps, self.model_config.ndims)
-        optimizer = get_optimizer(lr)
+        self.train_acc = tf.reduce_mean(tf.cast(
+            tf.equal(y, tf.argmax(output_train, axis=1)),
+            dtype=tf.float32
+        ))
+        self.test_acc = tf.reduce_mean(tf.cast(
+            tf.equal(y, tf.argmax(output_test, axis=1)),
+            dtype=tf.float32
+        ))
         self.train_op = optimizer.minimize(train_loss)
 
         # Train saver
@@ -75,4 +84,33 @@ class ClassifyTrainer(object):
             if latest_checkpoint is not None:
                 train_saver.restore(session, latest_checkpoint)
 
-    # def train_step(self, )
+    def train_step(self, train_iter):
+        """
+            train_iter: iterator that return ((indices, seq_lens), label) to feed to the model
+        """
+        t0 = time.time()
+        for (indices, seq_lens), label in train_iter:
+            _, loss, acc, step = self.session.run([self.train_op, self.train_loss, self.train_acc, self.global_step],
+                                                  feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: label})
+            self.logger.info("Step {:4d}: loss: {:05.5f}, acc: {:05.5f}, time {:05.2f}".format(step, loss, acc, time.time()-t0))
+            if step % self.trainer_config.save_freq == 0:
+                self.train_saver.save(self.session, os.path.join(self.train_path, 'model.cpkt'), step)
+
+    def test_step(self, test_iter):
+        """
+            test_iter: iterator that return ((indices, seq_lens), label) to feed to the model
+        """
+        t0 = time.time()
+        total_loss, total_acc, total_len = 0.0, 0.0, 0
+        step = self.session.run(self.global_step)
+        self.test_saver.save(self.session, os.path.join(self.test_path, 'model.cpkt'), step)
+        for (indices, seq_lens), label in test_iter:
+            loss, acc = self.session.run([self.test_loss, self.test_acc],
+                                         feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: label})
+            total_loss += loss * len(label)
+            total_acc += acc * len(label)
+            total_len += len(label)
+            self.logger.info("Evaluate step: loss: {:05.5f}, acc: {:05.5f}, time {:05.2f}".format(loss, acc, time.time()-t0))
+        total_loss /= total_len
+        total_acc /= total_len
+        self.logger.info("Evaluate step: total loss: {:05.5f}, total acc: {:05.5f}, time {:05.2f}".format(total_loss, total_acc, time.time()-t0))
