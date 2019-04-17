@@ -48,12 +48,12 @@ class ClassifyTrainer(object):
             lr = self.lr = get_learning_rate(global_step, self.trainer_config.warmup_steps, self.model_config.ndims)
             optimizer = get_optimizer(lr)
         # Build train model
-        model_train = self.model_train = TransformerEncoderClassifier(*self.model_config, is_training=True, reuse=False)
+        model_train = self.model_train = TransformerEncoderClassifier(**self.model_config._asdict(), is_training=True, reuse=False)
         model_train.build(x.shape)
         output_train = self.output_train = model_train.call(x, seq_lens)
 
         # Build test model
-        model_test = self.model_test = TransformerEncoderClassifier(*self.model_config, is_training=False, reuse=True)
+        model_test = self.model_test = TransformerEncoderClassifier(**self.model_config._asdict(), is_training=False, reuse=True)
         model_test.build(x.shape)
         output_test = self.output_test = model_test.call(x, seq_lens)
 
