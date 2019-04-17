@@ -70,7 +70,7 @@ class ClassifyTrainer(object):
             tf.equal(y, tf.argmax(output_test, axis=1, output_type=tf.int32)),
             dtype=tf.float32
         ))
-        self.train_op = optimizer.minimize(train_loss)
+        self.train_op = optimizer.minimize(train_loss, global_step)
 
         # Train saver
         train_saver = self.train_saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=self.trainer_config.keep_n_train)
