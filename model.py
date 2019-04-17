@@ -191,10 +191,10 @@ class EncoderLayer(object):
             self.layer_norm_2 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
             self.layer_norm_2.build(ts)
 
-    def call(self, inputs):
+    def call(self, inputs, mask):
         with tf.variable_scope(self.name, reuse=self.reuse):
             # Multi-Head Attention
-            outputs = self.mult_att.call(inputs, inputs, inputs)
+            outputs = self.mult_att.call(inputs, inputs, inputs, mask)
             if self.is_training and self.dropout > 0.0:
                 outputs = tf.nn.dropout(outputs, rate=self.dropout)
             outputs += inputs
@@ -209,8 +209,8 @@ class EncoderLayer(object):
         return outputs
 
 
-class Encoder(object):
-    def __init__(self, ndims=512, nheads=8, nlayers=6, ff_ndims=2048, dropout=0.5, is_training=True, reuse=tf.AUTO_REUSE, name='TransformerEncoder'):
+class TransformerEncoder(object):
+    def __init__(self, ndims=512, nheads=8, nlayers=6, ff_ndims=2048, vocab_size=2**13, maxlen=128, dropout=0.5, is_training=True, reuse=tf.AUTO_REUSE, name='TransformerEncoder'):
         """
             ndims: number of dimensions
             nheads: number of attention heads
@@ -229,18 +229,36 @@ class Encoder(object):
         self.dropout = dropout
         self.name = name
         self.reuse = reuse
+        self.vocab_size = vocab_size
+        self.maxlen = maxlen
 
     def build(self, input_shape):
         with tf.variable_scope(self.name, reuse=self.reuse):
+            # Embedding layer
+            with tf.variable_scope('EmbeddingLayer', reuse=self.reuse):
+                self.embedding_weight = tf.get_variable(name='embedding_weight', shape=(self.vocab_size, self.ndims), initializer=tf.random_uniform_initializer(-1.0, 1.0))
+                self.pe_weight = sinusoid_positional_encoding(self.maxlen, self.ndims)
+            # Stack of layer
             self.layers = []
-            for i in range(self.nlayers):
-                layer = EncoderLayer(self.ndims, self.nheads, self.ff_ndims, self.dropout, self.is_training, self.reuse, 'EncoderLayer_{}'.format(i))
-                layer.build(input_shape)
-                self.layers.append(layer)
+            with tf.variable_scope('EncoderLayers', reuse=self.reuse):
+                for i in range(self.nlayers):
+                    layer = EncoderLayer(self.ndims, self.nheads, self.ff_ndims, self.dropout, self.is_training, self.reuse, 'EncoderLayer_{}'.format(i))
+                    layer.build(input_shape)
+                    self.layers.append(layer)
 
-    def call(self, inputs):
+    def call(self, inputs, seq_lens):
+        """
+            inputs: [batch_size, seq_len] of word indices.
+            seq_lens: [batch_size] of sequence lengths
+        """
         with tf.variable_scope(self.name, reuse=self.reuse):
-            outputs = inputs
-            for layer in self.layers:
-                outputs = layer.call(outputs)
+            with tf.variable_scope('EmbeddingLayer', reuse=self.reuse):
+                embedding = tf.nn.embedding_lookup(self.embedding_weight, inputs)
+                input_len = tf.shape(inputs)[1]
+                pe = tf.nn.embedding_lookup(self.pe_weight, tf.range(0, input_len, 1, dtype=tf.int32))[tf.newaxis, :]
+                outputs = embedding + pe
+            with tf.variable_scope('EncoderLayers', reuse=self.reuse):
+                mask = tf.sequence_mask(seq_lens, dtype=tf.float32)
+                for layer in self.layers:
+                    outputs = layer.call(outputs, mask)
         return outputs
