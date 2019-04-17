@@ -78,8 +78,8 @@ class MultiheadAttention(object):
         return att_heads
 
 
-class FeedForward(object):
-    def __init__(self, layers, is_training=True, reuse=tf.AUTO_REUSE, name='FeedForward'):
+class PositionwiseFF(object):
+    def __init__(self, layers, is_training=True, reuse=tf.AUTO_REUSE, name='PositionwiseFF'):
         """
             layers: list of {'size','activation'}
         """
@@ -95,8 +95,8 @@ class FeedForward(object):
             for idx, layer in enumerate(self.layers):
                 with tf.variable_scope('layer_{}'.format(idx), reuse=self.reuse):
                     weight = {}
-                    weight['W'] = tf.get_variable(name='W', shape=(prev_shape, layer['size']))
-                    weight['b'] = tf.get_variable(name='b', shape=(layer['size'],))
+                    weight['W'] = tf.get_variable(name='W', shape=(1, prev_shape, layer['size']))
+                    weight['b'] = tf.get_variable(name='b', shape=(1, layer['size']))
                     self.weights.append(weight)
 
     def call(self, inputs):
@@ -106,7 +106,7 @@ class FeedForward(object):
                 with tf.variable_scope('layer_{}'.format(idx), reuse=self.reuse):
                     weight = self.weights[idx]
                     act = layer.get('activation')
-                    outputs = tf.add(tf.matmul(outputs, weight['W']), weight['b'])
+                    outputs = tf.nn.conv1d(outputs, weight['W'], 1, 'VALID', True, 'NWC') + weight['b']
                     if act is not None:
                         outputs = act(outputs)
         return outputs
@@ -180,7 +180,7 @@ class EncoderLayer(object):
             self.layer_norm_1 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse)
             self.layer_norm_1.build(tf.TensorShape((None, None, self.ndims)))
 
-            self.feed_forward = FeedForward([
+            self.feed_forward = PositionwiseFF([
                 {'size': self.ff_ndims, 'activation': tf.nn.relu},
                 {'size': self.ndims}
             ], is_training=self.is_training, reuse=self.reuse)
@@ -191,8 +191,6 @@ class EncoderLayer(object):
 
     def call(self, inputs):
         with tf.variable_scope(self.name, reuse=self.reuse):
-            input_shape = tf.shape(inputs)
-            bs, sl = input_shape[0], input_shape[1]
             # Multi-Head Attention
             outputs = self.mult_att.call(inputs, inputs, inputs)
             if self.is_training and self.dropout > 0.0:
@@ -200,12 +198,11 @@ class EncoderLayer(object):
             outputs += inputs
             outputs = self.layer_norm_1.call(outputs)
             # Position-wise feed forward
-            inputs = outputs = tf.reshape(outputs, (bs*sl, self.ndims))
+            inputs = outputs
             outputs = self.feed_forward.call(inputs)
             if self.is_training and self.dropout > 0.0:
                 outputs = tf.nn.dropout(outputs, rate=self.dropout)
             outputs += inputs
-            outputs = tf.reshape(outputs, (bs, sl, self.ndims))
             outputs = self.layer_norm_2.call(outputs)
         return outputs
 
