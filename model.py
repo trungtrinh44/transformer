@@ -100,6 +100,7 @@ class PositionwiseFF(object):
                     weight['W'] = tf.get_variable(name='W', shape=(1, prev_shape, layer['size']))
                     weight['b'] = tf.get_variable(name='b', shape=(1, layer['size']))
                     self.weights.append(weight)
+                    prev_shape = layer['size']
 
     def call(self, inputs):
         with tf.variable_scope(self.name, reuse=self.reuse):
