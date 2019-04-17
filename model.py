@@ -247,7 +247,7 @@ class TransformerEncoder(object):
             with tf.variable_scope('EncoderLayers', reuse=self.reuse):
                 for i in range(self.nlayers):
                     layer = EncoderLayer(self.ndims, self.nheads, self.ff_ndims, self.dropout, self.is_training, self.reuse, 'EncoderLayer_{}'.format(i))
-                    layer.build(input_shape)
+                    layer.build(tf.TensorShape(None, None, self.ndims))
                     self.layers.append(layer)
 
     def call(self, inputs, seq_lens):
