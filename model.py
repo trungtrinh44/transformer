@@ -6,18 +6,18 @@ import tensorflow as tf
 
 def scaled_dot_attention(Q, K, V, mask=None):
     """
-        Q: [batch_size, query_lengh, query_key_dim]
-        K: [batch_size, key_value_length, query_key_dim]
-        V: [batch_size, key_value_length, value_dim]
-        mask: broadcastable to [batch_size, query_length, key_value_length] use in the decoder to mask subsequent tokens.
+        Q: [..., query_lengh, query_key_dim]
+        K: [..., key_value_length, query_key_dim]
+        V: [..., key_value_length, value_dim]
+        mask: broadcastable to [..., query_length, key_value_length] use in the decoder to mask subsequent tokens.
     """
     assert Q.shape[-1] == K.shape[-1], "Q and K must have a last dimension of same size"
-    d_k = Q.shape[-1].value
-    att = tf.matmul(Q, tf.transpose(K, (0, 2, 1))) / d_k  # [batch_size, query_length, key_value_length]
+    d_k = tf.cast(Q.shape[-1], tf.float32)
+    att = tf.matmul(Q, K, transpose_b=True) / d_k  # [..., query_length, key_value_length]
     if mask is not None:
         att = att * mask + (1 - mask) * -1e20
-    att = tf.nn.softmax(att, axis=-1)  # [batch_size, query_length, key_value_length]
-    att = tf.matmul(att, V)  # [batch_size, query_lengh, value_dim]
+    att = tf.nn.softmax(att, axis=-1)  # [..., query_length, key_value_length]
+    att = tf.matmul(att, V)  # [..., query_lengh, value_dim]
     return att
 
 
@@ -38,11 +38,12 @@ def sinusoid_positional_encoding(npos, ndims):
 
 
 class MultiheadAttention(object):
-    def __init__(self, nheads, qk_dims, v_dims, is_training=True, reuse=tf.AUTO_REUSE, name='MultiheadAttention'):
+    def __init__(self, nheads, qk_dims, v_dims, ndims, is_training=True, reuse=tf.AUTO_REUSE, name='MultiheadAttention'):
         """
             nheads: number of attention heads
             qk_dims: query and key dimension size
             v_dims: value dimension size
+            ndims: output dimension size
             is_training: is training or not
             reuse: reuse variable or not
             name: model name
@@ -50,34 +51,52 @@ class MultiheadAttention(object):
         self.nheads = nheads
         self.qk_dims = qk_dims
         self.v_dims = v_dims
+        self.ndims = ndims
         self.is_training = is_training
         self.reuse = reuse
         self.name = name
 
     def build(self, q_shape, k_shape, v_shape):
         with tf.variable_scope(self.name, reuse=self.reuse):
-            self.head_params = []
-            for i in range(self.nheads):
-                with tf.variable_scope('head_{}'.format(i), reuse=self.reuse):
-                    weights = {}
-                    weights['w_q'] = tf.get_variable(name='w_q', shape=(1, q_shape[-1], self.qk_dims))
-                    weights['w_k'] = tf.get_variable(name='w_k', shape=(1, k_shape[-1], self.qk_dims))
-                    weights['w_v'] = tf.get_variable(name='w_v', shape=(1, v_shape[-1], self.v_dims))
-                    self.head_params.append(weights)
+            weights = {}
+            with tf.variable_scope('Query', reuse=self.reuse):
+                weights['w_q'] = tf.get_variable(name='weight', shape=(1, q_shape[-1], self.qk_dims * self.nheads))
+            with tf.variable_scope('Key', reuse=self.reuse):
+                weights['w_k'] = tf.get_variable(name='weight', shape=(1, k_shape[-1], self.qk_dims * self.nheads))
+            with tf.variable_scope('Value', reuse=self.reuse):
+                weights['w_v'] = tf.get_variable(name='weight', shape=(1, v_shape[-1], self.v_dims * self.nheads))
+            with tf.variable_scope('Linear', reuse=self.reuse):
+                weights['linear'] = tf.get_variable(name='weight', shape=(1, self.v_dims * self.nheads, self.ndims))
+            self.weights = weights
+
+    def split_heads(self, x, batch_size, att_dims):
+        """
+            x: Tensor of shape [batch_size, seq_len, nheads * att_dims]
+        """
+        x = tf.reshape(x, (batch_size, -1, self.nheads, att_dims))
+        x = tf.transpose(x, perm=(0, 2, 1, 3))
+        return x
 
     def call(self, Q, K, V, mask=None):
+        weights = self.weights
         with tf.variable_scope(self.name, reuse=self.reuse):
-            att_heads = []
-            for i in range(self.nheads):
-                with tf.variable_scope('head_{}'.format(i), reuse=self.reuse):
-                    weights = self.head_params[i]
-                    Q_i = tf.nn.conv1d(Q, weights['w_q'], 1, 'VALID', name='Q')
-                    K_i = tf.nn.conv1d(K, weights['w_k'], 1, 'VALID', name='K')
-                    V_i = tf.nn.conv1d(V, weights['w_v'], 1, 'VALID', name='V')
-                    head = scaled_dot_attention(Q_i, K_i, V_i, mask)
-                    att_heads.append(head)
-            att_heads = tf.concat(att_heads, axis=-1, name='att_heads')
-        return att_heads
+            batch_size = tf.shape(Q)[0]
+            with tf.variable_scope('Query', reuse=self.reuse):
+                Q = tf.nn.conv1d(Q, weights['w_q'], 1, 'VALID')  # [batch_size, q_lens, self.qk_dims * self.nheads]
+                Q = self.split_heads(Q, batch_size, self.qk_dims)  # [batch_size, nheads, q_lens, qk_dims]
+            with tf.variable_scope('Key', reuse=self.reuse):
+                K = tf.nn.conv1d(K, weights['w_k'], 1, 'VALID')  # [batch_size, k_lens, self.qk_dims * self.nheads]
+                K = self.split_heads(K, batch_size, self.qk_dims)  # [batch_size, nheads, k_lens, qk_dims]
+            with tf.variable_scope('Value', reuse=self.reuse):
+                V = tf.nn.conv1d(V, weights['w_v'], 1, 'VALID')  # [batch_size, k_lens, self.v_dims * self.nheads]
+                V = self.split_heads(V, batch_size, self.v_dims)  # [batch_size, nheads, k_lens, v_dims]
+            with tf.variable_scope('Scaled_Dot_Attention', reuse=self.reuse):
+                att_heads = scaled_dot_attention(Q, K, V, mask)  # [batch_size, nheads, q_lens, v_dims]
+                att_heads = tf.transpose(att_heads, perm=(0, 2, 1, 3))  # [batch_size, q_lens, nheads, v_dims]
+                att_heads = tf.reshape(att_heads, (batch_size, -1, self.v_dims))  # [batch_size, q_lens, v_dims * nheads]
+            with tf.variable_scope('Linear', reuse=self.reuse):
+                outputs = tf.nn.conv1d(att_heads, weights['linear'], 1, 'VALID')
+        return outputs
 
 
 class PositionwiseFF(object):
@@ -141,7 +160,7 @@ class LayerNorm(object):
                                         trainable=self.trainable)
         self.beta, self.gamma = beta, gamma
 
-    def call(self, inputs):
+    def call(self, inputs, variance_epsilon=1e-12):
         with tf.variable_scope(self.name, reuse=self.reuse):
             inputs_shape = inputs.shape
             inputs_rank = inputs_shape.ndims
@@ -150,7 +169,6 @@ class LayerNorm(object):
                 begin_norm_axis = inputs_rank + begin_norm_axis
             norm_axes = list(range(begin_norm_axis, inputs_rank))
             mean, variance = tf.nn.moments(inputs, norm_axes, keep_dims=True)
-            variance_epsilon = 1e-12
             outputs = tf.nn.batch_normalization(inputs, mean, variance, offset=self.beta, scale=self.gamma, variance_epsilon=variance_epsilon)
         return outputs
 
@@ -180,7 +198,7 @@ class EncoderLayer(object):
         with tf.variable_scope(self.name, reuse=self.reuse):
             ts = tf.TensorShape((None, None, self.ndims))
 
-            self.mult_att = MultiheadAttention(self.nheads, self.att_dims, self.att_dims, self.is_training, self.reuse)
+            self.mult_att = MultiheadAttention(self.nheads, self.att_dims, self.att_dims, self.ndims, self.is_training, self.reuse)
             self.mult_att.build(input_shape, input_shape, input_shape)
 
             self.layer_norm_1 = LayerNorm(begin_norm_axis=-1, trainable=self.is_training, reuse=self.reuse, name='LayerNorm_1')
@@ -202,14 +220,14 @@ class EncoderLayer(object):
             if self.is_training and self.dropout > 0.0:
                 outputs = tf.nn.dropout(outputs, keep_prob=1-self.dropout)
             outputs += inputs
-            outputs = self.layer_norm_1.call(outputs)
+            outputs = self.layer_norm_1.call(outputs, 1e-6)
             # Position-wise feed forward
             inputs = outputs
             outputs = self.feed_forward.call(inputs)
             if self.is_training and self.dropout > 0.0:
                 outputs = tf.nn.dropout(outputs, keep_prob=1-self.dropout)
             outputs += inputs
-            outputs = self.layer_norm_2.call(outputs)
+            outputs = self.layer_norm_2.call(outputs, 1e-6)
         return outputs
 
 
