@@ -78,6 +78,15 @@ class ClassifyTrainer(object):
         self.test_saver = tf.train.Saver(var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, model_train.name),
                                          max_to_keep=self.trainer_config.keep_n_test)
 
+        # Build summary
+        self.train_summary = tf.summary.merge([tf.summary.scalar('learning_rate', self.lr),
+                                               tf.summary.scalar('loss', self.train_loss),
+                                               tf.summary.scalar('acc', self.train_acc)], name='train_summary')
+        # self.test_summary = tf.summary.merge([tf.summary.scalar('loss', self.test_loss),
+        #                                       tf.summary.scalar('acc', self.test_acc)], name='test_summary')
+        self.train_writer = tf.summary.FileWriter(os.path.join(path, 'train_summary'), session.graph)
+        # self.test_writer = tf.summary.FileWriter(os.path.join(path, 'test_summary'), session.graph)
+
         session.run(tf.global_variables_initializer())
         if restore_checkpoint:
             latest_checkpoint = tf.train.latest_checkpoint(train_path)
@@ -90,9 +99,10 @@ class ClassifyTrainer(object):
         """
         t0 = time.time()
         for (indices, seq_lens), labels in train_iter:
-            _, loss, acc, step, lr = self.session.run([self.train_op, self.train_loss, self.train_acc, self.global_step, self.lr],
-                                                      feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: labels})
+            _, summ, loss, acc, step, lr = self.session.run([self.train_op, self.train_summary, self.train_loss, self.train_acc, self.global_step, self.lr],
+                                                            feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: labels})
             self.logger.info("Step {:4d}: loss: {:05.5f}, acc: {:05.5f}, lr: {:05.5f}, time {:05.2f}".format(step, loss, acc, lr, time.time()-t0))
+            self.train_writer.add_summary(summ, step)
             if step % self.trainer_config.save_freq == 0:
                 self.train_saver.save(self.session, os.path.join(self.train_path, 'model.cpkt'), step)
 
