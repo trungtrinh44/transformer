@@ -20,7 +20,8 @@ def get_optimizer(learning_rate):
 
 
 class ClassifyTrainer(object):
-    Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test', 'save_freq'])
+    Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test', 'save_freq', 'label_smoothing'],
+                        defaults=['checkpoint', 4000, 5, 5, 4000, 0.0])
 
     def __init__(self, model_config, trainer_config, name='ClassifyTrainer'):
         self.model_config = model_config
@@ -42,6 +43,7 @@ class ClassifyTrainer(object):
         with tf.variable_scope(self.name):
             x = self.x = tf.placeholder(shape=(None, None), dtype=tf.int32, name='x')
             y = self.y = tf.placeholder(shape=(None,), dtype=tf.int32, name='y')
+            one_hot_y = tf.one_hot(y, self.model_config.n_classes, dtype=tf.float32)
             seq_lens = self.seq_lens = tf.placeholder(shape=(None,), dtype=tf.int32, name='seq_lens')
             # Build optimizer
             global_step = self.global_step = tf.Variable(0, trainable=False, name='global_step')
@@ -58,7 +60,7 @@ class ClassifyTrainer(object):
         output_test = self.output_test = model_test.call(x, seq_lens)
 
         # Build loss value
-        train_loss = self.train_loss = tf.losses.sparse_softmax_cross_entropy(y, output_train)
+        train_loss = self.train_loss = tf.losses.softmax_cross_entropy(one_hot_y, output_train, label_smoothing=self.trainer_config.label_smoothing)
         self.test_loss = tf.losses.sparse_softmax_cross_entropy(y, output_test)
 
         # Build acc value
