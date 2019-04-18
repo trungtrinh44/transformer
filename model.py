@@ -93,7 +93,7 @@ class MultiheadAttention(object):
             with tf.variable_scope('Scaled_Dot_Attention', reuse=self.reuse):
                 att_heads = scaled_dot_attention(Q, K, V, mask)  # [batch_size, nheads, q_lens, v_dims]
                 att_heads = tf.transpose(att_heads, perm=(0, 2, 1, 3))  # [batch_size, q_lens, nheads, v_dims]
-                att_heads = tf.reshape(att_heads, (batch_size, -1, self.v_dims))  # [batch_size, q_lens, v_dims * nheads]
+                att_heads = tf.reshape(att_heads, (batch_size, -1, self.v_dims * self.nheads))  # [batch_size, q_lens, v_dims * nheads]
             with tf.variable_scope('Linear', reuse=self.reuse):
                 outputs = tf.nn.conv1d(att_heads, weights['linear'], 1, 'VALID')
         return outputs
