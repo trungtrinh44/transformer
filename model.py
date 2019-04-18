@@ -79,22 +79,22 @@ class MultiheadAttention(object):
 
     def call(self, Q, K, V, mask=None):
         weights = self.weights
-        with tf.variable_scope(self.name, reuse=True):
+        with tf.name_scope(self.name):
             batch_size = tf.shape(Q)[0]
-            with tf.variable_scope('Query', reuse=True):
+            with tf.name_scope('Query'):
                 Q = tf.nn.conv1d(Q, weights['w_q'], 1, 'VALID')  # [batch_size, q_lens, self.qk_dims * self.nheads]
                 Q = self.split_heads(Q, batch_size, self.qk_dims)  # [batch_size, nheads, q_lens, qk_dims]
-            with tf.variable_scope('Key', reuse=True):
+            with tf.name_scope('Key'):
                 K = tf.nn.conv1d(K, weights['w_k'], 1, 'VALID')  # [batch_size, k_lens, self.qk_dims * self.nheads]
                 K = self.split_heads(K, batch_size, self.qk_dims)  # [batch_size, nheads, k_lens, qk_dims]
-            with tf.variable_scope('Value', reuse=True):
+            with tf.name_scope('Value'):
                 V = tf.nn.conv1d(V, weights['w_v'], 1, 'VALID')  # [batch_size, k_lens, self.v_dims * self.nheads]
                 V = self.split_heads(V, batch_size, self.v_dims)  # [batch_size, nheads, k_lens, v_dims]
-            with tf.variable_scope('Scaled_Dot_Attention', reuse=True):
+            with tf.name_scope('Scaled_Dot_Attention'):
                 att_heads = scaled_dot_attention(Q, K, V, mask)  # [batch_size, nheads, q_lens, v_dims]
                 att_heads = tf.transpose(att_heads, perm=(0, 2, 1, 3))  # [batch_size, q_lens, nheads, v_dims]
                 att_heads = tf.reshape(att_heads, (batch_size, -1, self.v_dims * self.nheads))  # [batch_size, q_lens, v_dims * nheads]
-            with tf.variable_scope('Linear', reuse=True):
+            with tf.name_scope('Linear'):
                 outputs = tf.nn.conv1d(att_heads, weights['linear'], 1, 'VALID')
         return outputs
 
@@ -122,10 +122,10 @@ class PositionwiseFF(object):
                     prev_shape = layer['size']
 
     def call(self, inputs):
-        with tf.variable_scope(self.name, reuse=True):
+        with tf.name_scope(self.name):
             outputs = inputs
             for idx, layer in enumerate(self.layers):
-                with tf.variable_scope('layer_{}'.format(idx), reuse=True):
+                with tf.name_scope('layer_{}'.format(idx)):
                     weight = self.weights[idx]
                     act = layer.get('activation')
                     outputs = tf.nn.conv1d(outputs, weight['W'], 1, 'VALID', True, 'NWC') + weight['b']
@@ -161,7 +161,7 @@ class LayerNorm(object):
         self.beta, self.gamma = beta, gamma
 
     def call(self, inputs, variance_epsilon=1e-12):
-        with tf.variable_scope(self.name, reuse=True):
+        with tf.name_scope(self.name):
             inputs_shape = inputs.shape
             inputs_rank = inputs_shape.ndims
             begin_norm_axis = self.begin_norm_axis
@@ -214,7 +214,7 @@ class EncoderLayer(object):
             self.layer_norm_2.build(ts)
 
     def call(self, inputs, mask):
-        with tf.variable_scope(self.name, reuse=True):
+        with tf.name_scope(self.name):
             # Multi-Head Attention
             outputs = self.mult_att.call(inputs, inputs, inputs, mask)
             if self.is_training and self.dropout > 0.0:
@@ -275,13 +275,13 @@ class TransformerEncoder(object):
             inputs: [batch_size, seq_len] of word indices.
             seq_lens: [batch_size] of sequence lengths
         """
-        with tf.variable_scope(self.name, reuse=True):
-            with tf.variable_scope('EmbeddingLayer', reuse=True):
+        with tf.name_scope(self.name):
+            with tf.name_scope('EmbeddingLayer'):
                 embedding = tf.nn.embedding_lookup(self.embedding_weight, inputs)
                 input_len = tf.shape(inputs)[1]
                 pe = tf.nn.embedding_lookup(self.pe_weight, tf.range(0, input_len, 1, dtype=tf.int32))[tf.newaxis, :]
                 outputs = embedding * (self.ndims**0.5) + pe
-            with tf.variable_scope('EncoderLayers', reuse=True):
+            with tf.name_scope('EncoderLayers'):
                 mask = tf.sequence_mask(seq_lens, dtype=tf.float32)
                 mask = mask[:, tf.newaxis, tf.newaxis, :]
                 for layer in self.layers:
@@ -306,8 +306,8 @@ class TransformerEncoderClassifier(TransformerEncoder):
 
     def call(self, inputs, seq_lens):
         outputs = super().call(inputs, seq_lens)
-        with tf.variable_scope(self.name, reuse=True):
-            with tf.variable_scope('Classifier', reuse=True):
+        with tf.name_scope(self.name):
+            with tf.name_scope('Classifier'):
                 # use the output at the first time step for classification
                 outputs = tf.nn.xw_plus_b(outputs[:, 0], self.cls_weight['W'], self.cls_weight['b'])
         return outputs
