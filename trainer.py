@@ -20,8 +20,7 @@ def get_optimizer(learning_rate):
 
 
 class ClassifyTrainer(object):
-    Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test', 'save_freq', 'label_smoothing'],
-                        defaults=['checkpoint', 4000, 5, 5, 4000, 0.0])
+    Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test', 'save_freq', 'label_smoothing'])
 
     def __init__(self, model_config, trainer_config, name='ClassifyTrainer'):
         self.model_config = model_config
