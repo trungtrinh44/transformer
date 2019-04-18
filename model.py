@@ -262,7 +262,7 @@ class TransformerEncoder(object):
                 embedding = tf.nn.embedding_lookup(self.embedding_weight, inputs)
                 input_len = tf.shape(inputs)[1]
                 pe = tf.nn.embedding_lookup(self.pe_weight, tf.range(0, input_len, 1, dtype=tf.int32))[tf.newaxis, :]
-                outputs = embedding + pe
+                outputs = embedding * (self.ndims**0.5) + pe
             with tf.variable_scope('EncoderLayers', reuse=self.reuse):
                 mask = tf.sequence_mask(seq_lens, dtype=tf.float32)
                 mask = tf.expand_dims(mask, axis=1)
