@@ -37,3 +37,16 @@ def get_batch_classifier(data, batch_size, shuffle):
         for idx, (seq, _) in enumerate(batch):
             indices[idx][:len(seq)] = seq
         yield (indices, seq_lens), labels
+
+
+def get_batch_inference(data, batch_size):
+    """
+        data: a numpy array of feature
+    """
+    for i in range(0, len(data), batch_size):
+        batch = data[i:i+batch_size]
+        seq_lens = np.array([len(x) for x in batch], dtype=np.int32)
+        indices = np.zeros(shape=(len(batch), seq_lens.max()), dtype=np.int32)
+        for idx, seq in enumerate(batch):
+            indices[idx][:len(seq)] = seq
+        yield indices, seq_lens
