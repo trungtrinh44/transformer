@@ -280,7 +280,7 @@ class TransformerEncoder(object):
                 input_len = tf.shape(inputs)[1]
                 outputs = embedding * (self.ndims**0.5) + self.pe_weight[:, :input_len, :]
             with tf.name_scope('EncoderLayers'):
-                mask = tf.equal(inputs, 0, name='mask') # 0 is the padding value
+                mask = tf.cast(tf.equal(inputs, 0), tf.float32, name='mask')  # 0 is the padding value
                 mask = mask[:, tf.newaxis, tf.newaxis, :]
                 for layer in self.layers:
                     outputs = layer.call(outputs, mask)
