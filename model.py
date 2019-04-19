@@ -15,7 +15,7 @@ def scaled_dot_attention(Q, K, V, mask=None):
     d_k = tf.cast(Q.shape[-1], tf.float32)
     att = tf.matmul(Q, K, transpose_b=True) / d_k  # [..., query_length, key_value_length]
     if mask is not None:
-        att = att * mask + (1 - mask) * -1e20
+        att += mask * -1e9
     att = tf.nn.softmax(att, axis=-1)  # [..., query_length, key_value_length]
     att = tf.matmul(att, V)  # [..., query_lengh, value_dim]
     return att
@@ -32,9 +32,8 @@ def sinusoid_positional_encoding(npos, ndims):
     cols = np.power(10000, cols)  # [ndims]
     pe = np.arange(0, npos, 1)[:, np.newaxis]  # [npos, 1]
     pe = pe / cols
-    pe[:, 0::2] = np.sin(pe[:, 0::2])
-    pe[:, 1::2] = np.cos(pe[:, 1::2])
-    return tf.convert_to_tensor(pe, dtype=tf.float32)
+    pe = np.concatenate((np.sin(pe[:, 0::2]), np.cos(pe[:, 1::2])), axis=1)
+    return tf.convert_to_tensor(pe[np.newaxis, :], dtype=tf.float32)
 
 
 class MultiheadAttention(object):
@@ -279,10 +278,9 @@ class TransformerEncoder(object):
             with tf.name_scope('EmbeddingLayer'):
                 embedding = tf.nn.embedding_lookup(self.embedding_weight, inputs)
                 input_len = tf.shape(inputs)[1]
-                pe = tf.nn.embedding_lookup(self.pe_weight, tf.range(0, input_len, 1, dtype=tf.int32))[tf.newaxis, :]
-                outputs = embedding * (self.ndims**0.5) + pe
+                outputs = embedding * (self.ndims**0.5) + self.pe_weight[:, :input_len, :]
             with tf.name_scope('EncoderLayers'):
-                mask = tf.sequence_mask(seq_lens, dtype=tf.float32)
+                mask = tf.equal(inputs, 0, name='mask') # 0 is the padding value
                 mask = mask[:, tf.newaxis, tf.newaxis, :]
                 for layer in self.layers:
                     outputs = layer.call(outputs, mask)
