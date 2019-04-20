@@ -106,6 +106,7 @@ class ClassifyTrainer(object):
             self.train_writer.add_summary(summ, step)
             if step % self.trainer_config.save_freq == 0:
                 self.train_saver.save(self.session, os.path.join(self.train_path, 'model.cpkt'), step)
+        self.train_saver.save(self.session, os.path.join(self.train_path, 'model.cpkt'), step)
 
     def test_step(self, test_iter):
         """
