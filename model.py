@@ -302,8 +302,8 @@ class TransformerEncoderClassifier(TransformerEncoder):
         super().__init__(ndims, nheads, nlayers, ff_ndims, vocab_size, maxlen, dropout, is_training, reuse, name)
         self.n_classes = n_classes
 
-    def build(self, input_shape):
-        super().build(input_shape)
+    def build(self, input_shape, pretrained_wv=None, train_wv=True):
+        super().build(input_shape, pretrained_wv, train_wv)
         with tf.variable_scope(self.name, reuse=self.reuse):
             with tf.variable_scope('Classifier', reuse=self.reuse):
                 self.cls_weight = {}

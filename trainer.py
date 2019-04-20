@@ -27,7 +27,7 @@ class ClassifyTrainer(object):
         self.trainer_config = trainer_config
         self.name = name
 
-    def build(self, restore_checkpoint=True):
+    def build(self, restore_checkpoint=True, pretrained_wv=None, train_wv=True):
         path = self.path = self.trainer_config.path
         train_path = self.train_path = os.path.join(path, 'train')
         self.test_path = os.path.join(path, 'test')
@@ -50,7 +50,7 @@ class ClassifyTrainer(object):
             optimizer = get_optimizer(lr)
         # Build train model
         model_train = self.model_train = TransformerEncoderClassifier(**self.model_config._asdict(), is_training=True, reuse=False)
-        model_train.build(x.shape)
+        model_train.build(x.shape, pretrained_wv, train_wv)
         output_train = self.output_train = model_train.call(x, seq_lens)
 
         # Build test model
