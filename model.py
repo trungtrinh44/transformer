@@ -255,11 +255,19 @@ class TransformerEncoder(object):
         self.vocab_size = vocab_size
         self.maxlen = maxlen
 
-    def build(self, input_shape):
+    def build(self, input_shape, pretrain_wv=None, train_wv=True):
+        """
+        pretrain_wv: None of a numpy array containing pretrain word vector
+        train_wv: use only when pretrain_wv is available
+        """
         with tf.variable_scope(self.name, reuse=self.reuse):
             # Embedding layer
             with tf.variable_scope('EmbeddingLayer', reuse=self.reuse):
-                self.embedding_weight = tf.get_variable(name='embedding_weight', shape=(self.vocab_size, self.ndims), initializer=tf.random_uniform_initializer(-1.0, 1.0))
+                if pretrain_wv is None:
+                    self.embedding_weight = tf.get_variable(name='embedding_weight', shape=(self.vocab_size, self.ndims), initializer=tf.random_uniform_initializer(-1.0, 1.0))
+                else:
+                    assert pretrain_wv.shape[0] == self.vocab_size and pretrain_wv.shape[1] == self.ndims, "Pretrained word vec shape is incompatible with the model configuration"
+                    self.embedding_weight = tf.get_variable(name='embedding_weight', shape=(self.vocab_size, self.ndims), initializer=tf.constant_initializer(pretrain_wv), trainable=train_wv)
                 self.pe_weight = sinusoid_positional_encoding(self.maxlen, self.ndims)
             # Stack of layer
             self.layers = []
