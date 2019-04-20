@@ -288,7 +288,7 @@ class TransformerEncoder(object):
                 input_len = tf.shape(inputs)[1]
                 outputs = embedding * (self.ndims**0.5) + self.pe_weight[:, :input_len, :]
             with tf.name_scope('EncoderLayers'):
-                mask = tf.cast(tf.equal(inputs, 0), tf.float32, name='mask')  # 0 is the padding value
+                self.mask = mask = tf.cast(tf.equal(inputs, 0), tf.float32, name='mask')  # 0 is the padding value
                 mask = mask[:, tf.newaxis, tf.newaxis, :]
                 for layer in self.layers:
                     outputs = layer.call(outputs, mask)
@@ -314,6 +314,8 @@ class TransformerEncoderClassifier(TransformerEncoder):
         outputs = super().call(inputs, seq_lens)
         with tf.name_scope(self.name):
             with tf.name_scope('Classifier'):
-                # use the output at the first time step for classification
-                outputs = tf.nn.xw_plus_b(outputs[:, 0], self.cls_weight['W'], self.cls_weight['b'])
+                # use Global Max Pooling for aggregation for classification
+                outputs += self.mask[:, tf.newaxis] * -1e9  # Mask so that max value didn't come from padding tokens
+                outputs = tf.reduce_max(outputs, axis=1)
+                outputs = tf.nn.xw_plus_b(outputs, self.cls_weight['W'], self.cls_weight['b'])
         return outputs
