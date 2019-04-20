@@ -315,7 +315,7 @@ class TransformerEncoderClassifier(TransformerEncoder):
         with tf.name_scope(self.name):
             with tf.name_scope('Classifier'):
                 # use Global Max Pooling for aggregation for classification
-                outputs += self.mask[:, tf.newaxis] * -1e9  # Mask so that max value didn't come from padding tokens
+                outputs += self.mask[:, :, tf.newaxis] * -1e9  # Mask so that max value didn't come from padding tokens
                 outputs = tf.reduce_max(outputs, axis=1)
                 outputs = tf.nn.xw_plus_b(outputs, self.cls_weight['W'], self.cls_weight['b'])
         return outputs
