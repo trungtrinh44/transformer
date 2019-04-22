@@ -5,27 +5,26 @@ from collections import namedtuple
 import tensorflow as tf
 
 from model import TransformerEncoderClassifier
+from optimizers import TransformerOptimizer
 from utils import get_logger
 
-
-def get_learning_rate(step_num, warmup_steps, d_model):
-    step_num = tf.cast(step_num, tf.float32)
-    d_model = tf.convert_to_tensor(d_model, dtype=tf.float32)
-    warmup_steps = tf.convert_to_tensor(warmup_steps, dtype=tf.float32)
-    return tf.pow(d_model, -0.5) * tf.minimum(tf.pow(step_num, -0.5), step_num * tf.pow(warmup_steps, -1.5))
-
-
-def get_optimizer(learning_rate):
-    return tf.train.AdamOptimizer(learning_rate, beta1=0.9, beta2=0.98, epsilon=1e-09)
-
+name2model = {
+    'transformer_classifier': TransformerEncoderClassifier
+}
+name2optimizer = {
+    'transformer_optimizer': TransformerOptimizer
+}
 
 class ClassifyTrainer(object):
-    Config = namedtuple('ClassifyTrainerConfig', ['path', 'warmup_steps', 'keep_n_train', 'keep_n_test', 'save_freq', 'label_smoothing'])
+    Config = namedtuple('ClassifyTrainerConfig', ['path', 'model', 'optimizer', 'keep_n_train', 'keep_n_test', 'save_freq', 'label_smoothing'])
 
-    def __init__(self, model_config, trainer_config, name='ClassifyTrainer'):
+    def __init__(self, model_config, trainer_config, optimizer_config, name='ClassifyTrainer'):
         self.model_config = model_config
         self.trainer_config = trainer_config
+        self.optimizer_config = optimizer_config
         self.name = name
+        self.model_cls = name2model[self.trainer_config.model]
+        self.optimizer_cls = name2optimizer[self.trainer_config.optimizer]
 
     def build(self, restore_checkpoint=True, pretrained_wv=None, train_wv=True):
         path = self.path = self.trainer_config.path
@@ -46,15 +45,15 @@ class ClassifyTrainer(object):
             seq_lens = self.seq_lens = tf.placeholder(shape=(None,), dtype=tf.int32, name='seq_lens')
             # Build optimizer
             global_step = self.global_step = tf.Variable(0, trainable=False, name='global_step')
-            lr = self.lr = get_learning_rate(global_step, self.trainer_config.warmup_steps, self.model_config.ndims)
-            optimizer = get_optimizer(lr)
+            optimizer = self.optimizer = self.optimizer_cls(**self.optimizer_config._asdict())
+            minimize = optimizer.call(global_step).minimize
         # Build train model
-        model_train = self.model_train = TransformerEncoderClassifier(**self.model_config._asdict(), is_training=True, reuse=False)
+        model_train = self.model_train = self.model_cls(**self.model_config._asdict(), is_training=True, reuse=False)
         model_train.build(x.shape, pretrained_wv, train_wv)
         output_train = self.output_train = model_train.call(x, seq_lens)
 
         # Build test model
-        model_test = self.model_test = TransformerEncoderClassifier(**self.model_config._asdict(), is_training=False, reuse=True)
+        model_test = self.model_test = self.model_cls(**self.model_config._asdict(), is_training=False, reuse=True)
         model_test.build(x.shape)
         output_test = self.output_test = model_test.call(x, seq_lens)
 
@@ -71,7 +70,7 @@ class ClassifyTrainer(object):
             tf.equal(y, tf.argmax(output_test, axis=1, output_type=tf.int32)),
             dtype=tf.float32
         ))
-        self.train_op = optimizer.minimize(train_loss, global_step)
+        self.train_op = minimize(train_loss, global_step)
 
         # Train saver
         train_saver = self.train_saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=self.trainer_config.keep_n_train)
@@ -80,7 +79,7 @@ class ClassifyTrainer(object):
                                          max_to_keep=self.trainer_config.keep_n_test)
 
         # Build summary
-        self.train_summary = tf.summary.merge([tf.summary.scalar('learning_rate', self.lr),
+        self.train_summary = tf.summary.merge([optimizer.summary(),
                                                tf.summary.scalar('loss', self.train_loss),
                                                tf.summary.scalar('acc', self.train_acc)], name='train_summary')
         # self.test_summary = tf.summary.merge([tf.summary.scalar('loss', self.test_loss),
@@ -100,7 +99,7 @@ class ClassifyTrainer(object):
         """
         t0 = time.time()
         for (indices, seq_lens), labels in train_iter:
-            _, summ, loss, acc, step, lr = self.session.run([self.train_op, self.train_summary, self.train_loss, self.train_acc, self.global_step, self.lr],
+            _, summ, loss, acc, step, lr = self.session.run([self.train_op, self.train_summary, self.train_loss, self.train_acc, self.global_step, self.optimizer.learning_rate],
                                                             feed_dict={self.x: indices, self.seq_lens: seq_lens, self.y: labels})
             self.logger.info("Step {:4d}: loss: {:05.5f}, acc: {:05.5f}, lr: {:05.5f}, time {:05.2f}".format(step, loss, acc, lr, time.time()-t0))
             self.train_writer.add_summary(summ, step)
