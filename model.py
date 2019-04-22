@@ -287,7 +287,7 @@ class TransformerEncoder(object):
                 embedding = tf.nn.embedding_lookup(self.embedding_weight, inputs)
                 input_len = tf.shape(inputs)[1]
                 outputs = embedding * (self.ndims**0.5) + self.pe_weight[:, :input_len, :]
-                if self.dropout > 0.0 and self.is_training:
+                if self.is_training and self.dropout > 0.0:
                     outputs = tf.nn.dropout(outputs, keep_prob=1-self.dropout)
             with tf.name_scope('EncoderLayers'):
                 self.mask = mask = tf.cast(tf.equal(inputs, 0), tf.float32, name='mask')  # 0 is the padding value
@@ -298,11 +298,25 @@ class TransformerEncoder(object):
 
 
 class TransformerEncoderClassifier(TransformerEncoder):
-    Config = namedtuple('TransformerEncoderClassifierConfig', TransformerEncoder.Config._fields + ('n_classes',))
+    Config = namedtuple('TransformerEncoderClassifierConfig', TransformerEncoder.Config._fields + ('n_classes', 'agg_scheme'))
 
-    def __init__(self, n_classes, ndims=512, nheads=8, nlayers=6, ff_ndims=2048, vocab_size=2**13, maxlen=128, dropout=0.5, is_training=True, reuse=tf.AUTO_REUSE, name='TransformerEncoderClassifier'):
+    def __init__(self, n_classes,
+                 ndims=512,
+                 nheads=8,
+                 nlayers=6,
+                 ff_ndims=2048,
+                 vocab_size=2**13,
+                 maxlen=128,
+                 dropout=0.5,
+                 is_training=True,
+                 reuse=tf.AUTO_REUSE,
+                 agg_scheme='max',
+                 name='TransformerEncoderClassifier'):
+        agg_scheme = agg_scheme.lower()
+        assert agg_scheme in ('max', 'avg'), 'Aggregation scheme must be MAX or AVG'
         super().__init__(ndims, nheads, nlayers, ff_ndims, vocab_size, maxlen, dropout, is_training, reuse, name)
         self.n_classes = n_classes
+        self.agg_scheme = agg_scheme
 
     def build(self, input_shape, pretrained_wv=None, train_wv=True):
         super().build(input_shape, pretrained_wv, train_wv)
@@ -316,8 +330,14 @@ class TransformerEncoderClassifier(TransformerEncoder):
         outputs = super().call(inputs, seq_lens)
         with tf.name_scope(self.name):
             with tf.name_scope('Classifier'):
-                # use Global Max Pooling for aggregation for classification
-                outputs += self.mask[..., tf.newaxis] * -1e9  # Mask so that max value didn't come from padding tokens
-                outputs = tf.reduce_max(outputs, axis=1)
+                if self.agg_scheme == 'max':
+                    # use Global Max Pooling for aggregation for classification
+                    outputs += self.mask[..., tf.newaxis] * -1e9  # Mask so that aggregate value didn't come from padding tokens
+                    outputs = tf.reduce_max(outputs, axis=1)
+                elif self.agg_scheme == 'avg':
+                    # use Global Averaging for aggregation for classification
+                    mask = 1.0 - self.mask
+                    outputs *= mask[..., tf.newaxis]
+                    outputs = tf.reduce_sum(outputs, axis=1) / tf.reduce_sum(mask, axis=1, keepdims=True)
                 outputs = tf.nn.xw_plus_b(outputs, self.cls_weight['W'], self.cls_weight['b'])
         return outputs
