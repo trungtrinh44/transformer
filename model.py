@@ -287,6 +287,8 @@ class TransformerEncoder(object):
                 embedding = tf.nn.embedding_lookup(self.embedding_weight, inputs)
                 input_len = tf.shape(inputs)[1]
                 outputs = embedding * (self.ndims**0.5) + self.pe_weight[:, :input_len, :]
+                if self.dropout > 0.0 and self.is_training:
+                    outputs = tf.nn.dropout(outputs, keep_prob=1-self.dropout)
             with tf.name_scope('EncoderLayers'):
                 self.mask = mask = tf.cast(tf.equal(inputs, 0), tf.float32, name='mask')  # 0 is the padding value
                 mask = mask[:, tf.newaxis, tf.newaxis, :]
