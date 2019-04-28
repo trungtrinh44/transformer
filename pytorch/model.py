@@ -40,7 +40,7 @@ class PositionalEncoding(nn.Module):
         """
         x: a tensor of size (batch_size, max_len, d_model)
         """
-        return x * (self.d_model ** 0.5) + self.pe[:, x.size(1)]
+        return x * (self.d_model ** 0.5) + self.pe[:, :x.size(1)]
 
 
 def get_seq_mask(lens):
