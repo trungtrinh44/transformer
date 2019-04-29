@@ -41,8 +41,8 @@ class PositionalEncoding(nn.Module):
         return x * (self.d_model ** 0.5) + self.pe[:, :x.size(1)]
 
 
-def get_seq_mask(lens):
-    mask = torch.arange(0, lens.max(), 1)[None, :] >= lens[:, None]
+def get_seq_mask(lens, device):
+    mask = torch.arange(0, lens.max(), 1)[None, :].to(device) >= lens[:, None]
     mask = mask[:, None, None, :]
     return mask
 
@@ -52,8 +52,8 @@ def apply_mask(x, mask):
     return x
 
 
-def get_look_ahead_mask(max_len):
-    mask = torch.triu(torch.ones(max_len, max_len, dtype=torch.uint8), 1)
+def get_look_ahead_mask(max_len, device):
+    mask = torch.triu(torch.ones(max_len, max_len, dtype=torch.uint8), 1).to(device)
     mask = mask[None, None, ...]
     return mask
 
@@ -184,7 +184,7 @@ class TransformerEncoder(nn.Module):
         outputs = self.embed(x)
         outputs = self.pos_enc(outputs)
         outputs = self.dropout(outputs)
-        mask = get_seq_mask(lens).to(x.device)
+        mask = get_seq_mask(lens, x.device)
         for layer in self.layers:
             outputs = layer(outputs, mask)
         return outputs, mask
@@ -205,7 +205,7 @@ class TransformerDecoder(nn.Module):
         outputs = self.embed(x)
         outputs = self.pos_enc(outputs)
         outputs = self.dropout(outputs)
-        mask = get_look_ahead_mask(x.size(1)).to(x.device)
+        mask = get_look_ahead_mask(x.size(1), x.device)
         for layer in self.layers:
             outputs = layer(outputs, mask, enc_input, enc_mask)
         return outputs
