@@ -157,7 +157,7 @@ class BasicDecoderLayer(BasicLayer):
         return super().forward(x, x, x, mask)
 
 
-class DecoderLayer(BasicDecoderLayer):
+class DecoderLayer(BasicLayer):
     def __init__(self, d_model, nheads, d_ff, dropout):
         super().__init__(d_model, nheads, d_ff, dropout)
         self.first_mult_att = MultiHeadAtt(nheads, d_model, dropout)
