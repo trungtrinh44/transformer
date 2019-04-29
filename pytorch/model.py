@@ -2,9 +2,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-print(device)
-
 
 class WordEmbedding(nn.Module):
     def __init__(self, vocab_size, d_model):
@@ -33,8 +30,9 @@ class PositionalEncoding(nn.Module):
         pe = pos[:, None] / index[None, :]
         pe[:, 0::2] = torch.sin(pe[:, 0::2])
         pe[:, 1::2] = torch.cos(pe[:, 1::2])
-        self.pe = pe[None, :].to(device)
+        pe = pe[None, :]
         self.d_model = d_model
+        self.register_buffer('pe', pe)
 
     def forward(self, x):
         """
@@ -44,7 +42,7 @@ class PositionalEncoding(nn.Module):
 
 
 def get_seq_mask(lens):
-    mask = torch.arange(0, lens.max(), 1)[None, :].to(device) >= lens[:, None]
+    mask = torch.arange(0, lens.max(), 1)[None, :] >= lens[:, None]
     mask = mask[:, None, None, :]
     return mask
 
@@ -55,13 +53,13 @@ def apply_mask(x, mask):
 
 
 def get_look_ahead_mask(max_len):
-    mask = torch.triu(torch.ones(max_len, max_len, dtype=torch.uint8), 1).to(device)
+    mask = torch.triu(torch.ones(max_len, max_len, dtype=torch.uint8), 1)
     mask = mask[None, None, ...]
     return mask
 
 
 class MultiHeadAtt(nn.Module):
-    def __init__(self, nheads, d_model):
+    def __init__(self, nheads, d_model, dropout):
         """
         nheads: number of heads
         d_model: model's dimension size
@@ -75,7 +73,9 @@ class MultiHeadAtt(nn.Module):
         self.q_linear = nn.Linear(d_model, d_model, bias=False)
         self.v_linear = nn.Linear(d_model, d_model, bias=False)
         self.k_linear = nn.Linear(d_model, d_model, bias=False)
+        self.att_drop = nn.Dropout(dropout)
         self.out = nn.Linear(d_model, d_model, bias=False)
+        self.drop = nn.Dropout(dropout)
 
     def forward(self, Q, K, V, mask):
         """
@@ -93,20 +93,25 @@ class MultiHeadAtt(nn.Module):
         score = torch.matmul(q, k) / (self.d_model**0.5)
         score = apply_mask(score, mask)
         score = F.softmax(score, dim=-1)
+        score = self.att_drop(score)
 
         outputs = torch.matmul(score, v)
         outputs = outputs.permute(0, 2, 1, 3).contiguous().view(bs, -1, self.d_model)
+        outputs = self.out(outputs)
+        outputs = self.drop(outputs)
 
         return outputs
 
 
 class PositionwiseFeedForward(nn.Module):
-    def __init__(self, d_model, d_ff):
+    def __init__(self, d_model, d_ff, dropout):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(d_model, d_ff),
+            nn.Dropout(dropout),
             nn.ReLU(),
-            nn.Linear(d_ff, d_model)
+            nn.Linear(d_ff, d_model),
+            nn.Dropout(dropout)
         )
 
     def forward(self, x):
@@ -114,22 +119,21 @@ class PositionwiseFeedForward(nn.Module):
 
 
 class SubLayer(nn.Module):
-    def __init__(self, d_model, dropout):
+    def __init__(self, d_model):
         super().__init__()
-        self.dropout = nn.Dropout(dropout)
         self.ln = nn.LayerNorm(d_model)
 
     def forward(self, outputs, inputs):
-        return self.ln(self.dropout(outputs)+inputs)
+        return self.ln(outputs + inputs)
 
 
 class BasicLayer(nn.Module):
     def __init__(self, d_model, nheads, d_ff, dropout):
         super().__init__()
-        self.mult_att = MultiHeadAtt(nheads, d_model)
-        self.sub1 = SubLayer(d_model, dropout)
-        self.ff = PositionwiseFeedForward(d_model, d_ff)
-        self.sub2 = SubLayer(d_model, dropout)
+        self.mult_att = MultiHeadAtt(nheads, d_model, dropout)
+        self.sub1 = SubLayer(d_model)
+        self.ff = PositionwiseFeedForward(d_model, d_ff, dropout)
+        self.sub2 = SubLayer(d_model)
 
     def forward(self, q, k, v, mask):
         x = self.sub1(self.mult_att(q, k, v, mask), q)
@@ -156,8 +160,8 @@ class BasicDecoderLayer(BasicLayer):
 class DecoderLayer(BasicDecoderLayer):
     def __init__(self, d_model, nheads, d_ff, dropout):
         super().__init__(d_model, nheads, d_ff, dropout)
-        self.first_mult_att = MultiHeadAtt(nheads, d_model)
-        self.first_sub = SubLayer(d_model, dropout)
+        self.first_mult_att = MultiHeadAtt(nheads, d_model, dropout)
+        self.first_sub = SubLayer(d_model)
 
     def forward(self, x, mask, enc_input, enc_mask):
         outputs = self.first_sub(self.first_mult_att(x, x, x, mask), x)
@@ -180,7 +184,7 @@ class TransformerEncoder(nn.Module):
         outputs = self.embed(x)
         outputs = self.pos_enc(outputs)
         outputs = self.dropout(outputs)
-        mask = get_seq_mask(lens)
+        mask = get_seq_mask(lens).to(x.device)
         for layer in self.layers:
             outputs = layer(outputs, mask)
         return outputs, mask
@@ -201,7 +205,7 @@ class TransformerDecoder(nn.Module):
         outputs = self.embed(x)
         outputs = self.pos_enc(outputs)
         outputs = self.dropout(outputs)
-        mask = get_look_ahead_mask(x.size(1))
+        mask = get_look_ahead_mask(x.size(1)).to(x.device)
         for layer in self.layers:
             outputs = layer(outputs, mask, enc_input, enc_mask)
         return outputs
