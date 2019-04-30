@@ -222,8 +222,19 @@ class TransformerEncoderClassifier(TransformerEncoder):
         return F.log_softmax(outputs, dim=-1)
 
 
+class TransformerEncoderSequenceClassifier(TransformerEncoder):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout):
+        super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout)
+        self.out = nn.Linear(d_model, n_classes)
+
+    def forward(self, x, lens):
+        outputs, _ = super().forward(x, lens)
+        outputs = self.out(outputs)
+        return outputs
+
+
 class Transformer(nn.Module):
-    def __init__(self, nlayers, d_model, nheads, d_ff, src_vocab_size, tgt_vocab_size, npos, n_classes, dropout):
+    def __init__(self, nlayers, d_model, nheads, d_ff, src_vocab_size, tgt_vocab_size, npos, dropout):
         super().__init__()
         self.encoder = TransformerEncoder(nlayers, d_model, nheads, d_ff, src_vocab_size, npos, dropout)
         self.decoder = TransformerDecoder(nlayers, d_model, nheads, d_ff, tgt_vocab_size, npos, dropout)
