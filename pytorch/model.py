@@ -211,6 +211,38 @@ class TransformerDecoder(nn.Module):
         return outputs
 
 
+class TransformerIndependentDecoder(nn.Module):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout):
+        super().__init__()
+        self.embed = WordEmbedding(vocab_size, d_model)
+        self.pos_enc = PositionalEncoding(npos, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+        self.layers = nn.ModuleList([
+            BasicDecoderLayer(d_model, nheads, d_ff, dropout) for _ in range(nlayers)
+        ])
+
+    def forward(self, x):
+        outputs = self.embed(x)
+        outputs = self.pos_enc(outputs)
+        outputs = self.dropout(outputs)
+        mask = get_look_ahead_mask(x.size(1), x.device)
+        for layer in self.layers:
+            outputs = layer(outputs, mask)
+        return outputs
+
+
+class TransformerIndependentDecoderClassifier(TransformerIndependentDecoder):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout):
+        super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout)
+        self.out = nn.Linear(d_model, n_classes)
+
+    def forward(self, x):
+        outputs = super().forward(x)
+        outputs = self.out(outputs)
+        return outputs
+
+
 class TransformerEncoderClassifier(TransformerEncoder):
     def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout):
         super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout)
