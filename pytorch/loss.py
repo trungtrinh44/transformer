@@ -14,3 +14,12 @@ def categorical_cross_entropy(pred, gold, eps, weights=None, ignore_index=0):
         loss = loss * weights[gold]
     loss = loss.masked_select(non_pad_mask).mean()  # average later
     return loss
+
+
+class LayerwiseCategoricalCrossEntropyLoss(torch.nn.CrossEntropyLoss):
+    def __init__(self, coeff, weight=None, size_average=None, ignore_index=-100, reduce=None, reduction='mean'):
+        super().__init__(weight, size_average, ignore_index, reduce, reduction)
+        self.coeff = coeff
+
+    def forward(self, layers, y):
+        return sum(coeff * super().forward(layer, y) for layer, coeff in zip(layers, self.coeff))

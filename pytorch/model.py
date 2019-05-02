@@ -170,7 +170,7 @@ class DecoderLayer(BasicLayer):
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, layer_output=False):
         super().__init__()
         self.embed = WordEmbedding(vocab_size, d_model)
         self.pos_enc = PositionalEncoding(npos, d_model)
@@ -179,14 +179,21 @@ class TransformerEncoder(nn.Module):
         self.layers = nn.ModuleList([
             EncoderLayer(d_model, nheads, d_ff, dropout) for _ in range(nlayers)
         ])
+        self.layer_output = layer_output
 
     def forward(self, x, lens):
         outputs = self.embed(x)
         outputs = self.pos_enc(outputs)
         outputs = self.dropout(outputs)
         mask = get_seq_mask(lens, x.device)
+        if self.layer_output:
+            layer_outputs = []
         for layer in self.layers:
             outputs = layer(outputs, mask)
+            if self.layer_output:
+                layer_outputs.append(outputs)
+        if self.layer_output:
+            return layer_outputs, mask
         return outputs, mask
 
 
@@ -255,13 +262,19 @@ class TransformerEncoderClassifier(TransformerEncoder):
 
 
 class TransformerEncoderSequenceClassifier(TransformerEncoder):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout):
-        super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout)
-        self.out = nn.Linear(d_model, n_classes)
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout, layer_output=False):
+        super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, layer_output)
+        if self.layer_output:
+            self.out = nn.ModuleList([nn.Linear(d_model, n_classes) for _ in range(self.layers)])
+        else:
+            self.out = nn.Linear(d_model, n_classes)
 
     def forward(self, x, lens):
         outputs, _ = super().forward(x, lens)
-        outputs = self.out(outputs)
+        if self.layer_output:
+            outputs = [l(o) for o, l in zip(outputs, self.out)]
+        else:
+            outputs = self.out(outputs)
         return outputs
 
 
