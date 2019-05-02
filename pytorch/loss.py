@@ -22,4 +22,7 @@ class LayerwiseCategoricalCrossEntropyLoss(torch.nn.CrossEntropyLoss):
         self.coeff = coeff
 
     def forward(self, layers, y):
-        return sum(coeff * super().forward(layer, y) for layer, coeff in zip(layers, self.coeff))
+        loss = 0.0
+        for coeff, layer in zip(self.coeff, layers):
+            loss += coeff * super().forward(layer, y)
+        return loss
