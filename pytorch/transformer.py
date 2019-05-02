@@ -262,19 +262,23 @@ class TransformerEncoderClassifier(TransformerEncoder):
 
 
 class TransformerEncoderSequenceClassifier(TransformerEncoder):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout, layer_output=False):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout, layer_output=False, coeff=None):
         super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, layer_output)
         if self.layer_output:
             self.out = nn.ModuleList([nn.Linear(d_model, n_classes) for _ in range(nlayers)])
+            self.coeff = coeff
         else:
             self.out = nn.Linear(d_model, n_classes)
 
     def forward(self, x, lens):
         outputs, _ = super().forward(x, lens)
         if self.layer_output:
-            outputs = [l(o) for o, l in zip(outputs, self.out)]
+            out_sum = 0.0
+            for o, l, c in zip(outputs, self.out, self.coeff):
+                out_sum += c * nn.functional.log_softmax(l(o), dim=-1)
+            outputs = out_sum
         else:
-            outputs = self.out(outputs)
+            outputs = nn.functional.log_softmax(self.out(outputs), dim=-1)
         return outputs
 
 
