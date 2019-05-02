@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from activations import GELU
+
 
 class WordEmbedding(nn.Module):
     def __init__(self, vocab_size, d_model):
@@ -109,7 +111,7 @@ class PositionwiseFeedForward(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(d_model, d_ff),
             nn.Dropout(dropout),
-            nn.ReLU(),
+            GELU(),
             nn.Linear(d_ff, d_model),
             nn.Dropout(dropout)
         )
