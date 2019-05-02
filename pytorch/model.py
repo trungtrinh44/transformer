@@ -265,7 +265,7 @@ class TransformerEncoderSequenceClassifier(TransformerEncoder):
     def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout, layer_output=False):
         super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, layer_output)
         if self.layer_output:
-            self.out = nn.ModuleList([nn.Linear(d_model, n_classes) for _ in range(self.layers)])
+            self.out = nn.ModuleList([nn.Linear(d_model, n_classes) for _ in range(nlayers)])
         else:
             self.out = nn.Linear(d_model, n_classes)
 
