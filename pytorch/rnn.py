@@ -38,7 +38,7 @@ class RNNSequenceClassifier(nn.Module):
                 pad_outputs = pad_outputs.permute(1, 0, 2)
                 pad_outputs = out(pad_outputs)
                 pad_outputs = self.apply_mask(pad_outputs, pad_lengths)
-                all_outputs.append(all_outputs)
+                all_outputs.append(pad_outputs)
         if self.layer_outputs:
             return all_outputs
         return outputs
