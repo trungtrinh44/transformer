@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from activations import GELU
+from .activations import GELU
 
 
 class WordEmbedding(nn.Module):
