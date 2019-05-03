@@ -39,7 +39,7 @@ class PositionalEncoding(nn.Module):
             pe = pe[None, :]
             self.register_buffer('pe', pe)
         else:
-            self.pe = nn.Parameter(torch.from_numpy(np.float32(np.random.normal(0., 0.02, (npos, d_model)))))
+            self.pe = nn.Parameter(torch.from_numpy(np.float32(np.random.normal(0., 0.02, (1, npos, d_model)))))
 
     def forward(self, x):
         """
