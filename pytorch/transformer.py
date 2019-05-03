@@ -26,6 +26,8 @@ class PositionalEncoding(nn.Module):
         d_model: model's dimension size
         """
         super().__init__()
+        self.d_model = d_model
+        self.sinusoid = sinusoid
         if sinusoid:
             pos = torch.arange(0, npos, 1).float()
             index = torch.arange(0, d_model, 1) // 2 * 2
@@ -35,7 +37,6 @@ class PositionalEncoding(nn.Module):
             pe[:, 0::2] = torch.sin(pe[:, 0::2])
             pe[:, 1::2] = torch.cos(pe[:, 1::2])
             pe = pe[None, :]
-            self.d_model = d_model
             self.register_buffer('pe', pe)
         else:
             self.pe = nn.Parameter(torch.from_numpy(np.random.normal(0., 0.02, (npos, d_model))))
