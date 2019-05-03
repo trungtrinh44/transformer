@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -19,22 +20,25 @@ class WordEmbedding(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, npos, d_model):
+    def __init__(self, npos, d_model, sinusoid=True):
         """
         npos: number of positions
         d_model: model's dimension size
         """
         super().__init__()
-        pos = torch.arange(0, npos, 1).float()
-        index = torch.arange(0, d_model, 1) // 2 * 2
-        index = index.float() / d_model
-        index = 10000**index
-        pe = pos[:, None] / index[None, :]
-        pe[:, 0::2] = torch.sin(pe[:, 0::2])
-        pe[:, 1::2] = torch.cos(pe[:, 1::2])
-        pe = pe[None, :]
-        self.d_model = d_model
-        self.register_buffer('pe', pe)
+        if sinusoid:
+            pos = torch.arange(0, npos, 1).float()
+            index = torch.arange(0, d_model, 1) // 2 * 2
+            index = index.float() / d_model
+            index = 10000**index
+            pe = pos[:, None] / index[None, :]
+            pe[:, 0::2] = torch.sin(pe[:, 0::2])
+            pe[:, 1::2] = torch.cos(pe[:, 1::2])
+            pe = pe[None, :]
+            self.d_model = d_model
+            self.register_buffer('pe', pe)
+        else:
+            self.pe = nn.Parameter(torch.from_numpy(np.random.normal(0., 0.02, (npos, d_model))))
 
     def forward(self, x):
         """
@@ -172,10 +176,10 @@ class DecoderLayer(BasicLayer):
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, layer_output=False):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, pos_enc_sinusoid=True, layer_output=False):
         super().__init__()
         self.embed = WordEmbedding(vocab_size, d_model)
-        self.pos_enc = PositionalEncoding(npos, d_model)
+        self.pos_enc = PositionalEncoding(npos, d_model, pos_enc_sinusoid)
         self.dropout = nn.Dropout(dropout)
 
         self.layers = nn.ModuleList([
@@ -200,10 +204,10 @@ class TransformerEncoder(nn.Module):
 
 
 class TransformerDecoder(nn.Module):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, pos_enc_sinusoid=True):
         super().__init__()
         self.embed = WordEmbedding(vocab_size, d_model)
-        self.pos_enc = PositionalEncoding(npos, d_model)
+        self.pos_enc = PositionalEncoding(npos, d_model, pos_enc_sinusoid)
         self.dropout = nn.Dropout(dropout)
 
         self.layers = nn.ModuleList([
@@ -221,10 +225,10 @@ class TransformerDecoder(nn.Module):
 
 
 class TransformerIndependentDecoder(nn.Module):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout):
+    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, pos_enc_sinusoid=True):
         super().__init__()
         self.embed = WordEmbedding(vocab_size, d_model)
-        self.pos_enc = PositionalEncoding(npos, d_model)
+        self.pos_enc = PositionalEncoding(npos, d_model, pos_enc_sinusoid)
         self.dropout = nn.Dropout(dropout)
 
         self.layers = nn.ModuleList([
@@ -238,49 +242,6 @@ class TransformerIndependentDecoder(nn.Module):
         mask = get_look_ahead_mask(x.size(1), x.device)
         for layer in self.layers:
             outputs = layer(outputs, mask)
-        return outputs
-
-
-class TransformerIndependentDecoderClassifier(TransformerIndependentDecoder):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout):
-        super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout)
-        self.out = nn.Linear(d_model, n_classes)
-
-    def forward(self, x):
-        outputs = super().forward(x)
-        outputs = self.out(outputs)
-        return outputs
-
-
-class TransformerEncoderClassifier(TransformerEncoder):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout):
-        super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout)
-        self.out = nn.Linear(d_model, n_classes)
-
-    def forward(self, x, lens):
-        outputs, _ = super().forward(x, lens)
-        outputs = self.out(outputs[:, 0, :])
-        return F.log_softmax(outputs, dim=-1)
-
-
-class TransformerEncoderSequenceClassifier(TransformerEncoder):
-    def __init__(self, nlayers, d_model, nheads, d_ff, vocab_size, npos, n_classes, dropout, layer_output=False, coeff=None):
-        super().__init__(nlayers, d_model, nheads, d_ff, vocab_size, npos, dropout, layer_output)
-        if self.layer_output:
-            self.out = nn.ModuleList([nn.Linear(d_model, n_classes) for _ in range(nlayers)])
-            self.coeff = coeff
-        else:
-            self.out = nn.Linear(d_model, n_classes)
-
-    def forward(self, x, lens):
-        outputs, _ = super().forward(x, lens)
-        if self.layer_output:
-            out_sum = 0.0
-            for o, l, c in zip(outputs, self.out, self.coeff):
-                out_sum += c * nn.functional.log_softmax(l(o), dim=-1)
-            outputs = out_sum
-        else:
-            outputs = nn.functional.log_softmax(self.out(outputs), dim=-1)
         return outputs
 
 
