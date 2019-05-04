@@ -28,7 +28,8 @@ class BucketByLengthSampler(Sampler):
     def __init__(self, data_source, buckets):
         self.data_source = data_source
         self.bucket_len = [0] + buckets + [1e9]
-        self.lens = np.array([len(x) for x in data_source], dtype=np.int32).sort()
+        self.lens = np.array([len(x) for x in data_source], dtype=np.int32)
+        self.lens.sort()
 
     def __iter__(self):
         self.buckets = [((self.lens < max_len) & (self.lens >= min_len)).nonzero()[0] for min_len, max_len in zip(self.bucket_len[:-1], self.bucket_len[1:])]
