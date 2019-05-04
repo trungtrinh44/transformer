@@ -258,3 +258,19 @@ class Transformer(nn.Module):
         outputs = self.decoder(tgt, outputs, mask)
         outputs = self.out(outputs)
         return outputs
+
+
+class LinearDecoder(nn.Module):
+    def __init__(self, in_features=None, out_features=None, weights=None, bias=None):
+        super().__init__()
+        if weights is not None:
+            self.register_parameter('weight', weights)
+        else:
+            self.register_parameter('weight', nn.Parameter(torch.Tensor(in_features, out_features)))
+        if bias is not None:
+            self.register_parameter('bias', bias)
+        else:
+            self.register_parameter('bias', nn.Parameter(torch.Tensor(out_features)))
+
+    def forward(self, x):
+        return torch.nn.functional.linear(x, self.weight, self.bias)
