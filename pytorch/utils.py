@@ -27,7 +27,7 @@ def init_transformer(m):
 class BucketByLengthSampler(Sampler):
     def __init__(self, data_source, buckets):
         self.data_source = data_source
-        self.bucket_len = buckets + [1e9]
+        self.bucket_len = [0] + buckets + [1e9]
         self.lens = np.array([len(x) for x in data_source], dtype=np.int32).sort()
 
     def __iter__(self):
