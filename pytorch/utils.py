@@ -46,9 +46,7 @@ class BucketByLengthSampler(Sampler):
         items = items.flatten()
         items = items[items >= 0]
         for idx in range(0, len(items), self.batch_size):
-            indices = items[idx:idx+self.batch_size]
-            batch = [self.data_source[i] for i in indices]
-            yield batch
+            yield items[idx:idx+self.batch_size]
 
     def __len__(self):
         return len(self.data_source)
