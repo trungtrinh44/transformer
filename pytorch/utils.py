@@ -40,7 +40,7 @@ class BucketByLengthSampler(Sampler):
         items = np.concatenate(self.buckets)
         nbatch = (len(self.data_source)-1)//self.batch_size + 1
         if len(items) < nbatch * self.batch_size:
-            items = np.concatenate([self.bucket_len, np.zeros((nbatch*self.batch_size-len(items),), np.int32)-1])
+            items = np.concatenate([items, np.zeros((nbatch*self.batch_size-len(items),), np.int32)-1])
         items = np.reshape(items, (nbatch, self.batch_size))
         np.random.shuffle(items)
         items = items.flatten()
