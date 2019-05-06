@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import Sampler
+from torch.utils.data import Sampler, Dataset
 
 
 def init_transformer(m):
@@ -26,7 +26,7 @@ def init_transformer(m):
 
 
 class BucketByLengthSampler(Sampler):
-    def __init__(self, data_source, buckets, batch_size):
+    def __init__(self, data_source, buckets, batch_size, maxlen):
         self.data_source = data_source
         self.bucket_len = [0] + buckets + [1e9]
         self.lens = np.array([len(x) for x in data_source], dtype=np.int32)
@@ -68,3 +68,20 @@ class Padder(object):
         seq_len = maxlen
         texts = [x[:seq_len] for x in tensors]
         return self.padding(texts)
+
+
+class TextDataset(Dataset):
+    def __init__(self, X, maxlen):
+        self.maxlen = maxlen
+        self.X = [s for x in X for s in self.__get_snippets(x)]
+
+    def __get_snippets(self, text):
+        return [
+            text[i:i+self.maxlen] for i in range(0, len(text), self.maxlen)
+        ]
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx]
