@@ -115,7 +115,6 @@ class PositionwiseFeedForward(nn.Module):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(d_model, d_ff),
-            nn.Dropout(dropout),
             GELU(),
             nn.Linear(d_ff, d_model),
             nn.Dropout(dropout)
