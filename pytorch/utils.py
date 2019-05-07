@@ -85,3 +85,19 @@ class TextDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.X[idx]
+
+
+def apply_weight_decay(models):
+    param_optimizer = [np for model in models for np in model.named_parameters()]
+    no_decay = ['bias', 'gamma', 'beta']
+    optimizer_grouped_parameters = [
+        {
+            'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
+            'weight_decay_rate': 0.01
+        },
+        {
+            'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)],
+            'weight_decay_rate': 0.0
+        }
+    ]
+    return optimizer_grouped_parameters
