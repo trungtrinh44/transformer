@@ -97,7 +97,7 @@ class MultiHeadAtt(nn.Module):
         k = self.q_linear(K).view(bs, -1, self.nheads, self.d_k).permute(0, 2, 3, 1)
         v = self.q_linear(V).view(bs, -1, self.nheads, self.d_k).permute(0, 2, 1, 3)
 
-        score = torch.matmul(q, k) / (self.d_model**0.5)
+        score = torch.matmul(q, k) / (self.d_k**0.5)
         score = apply_mask(score, mask)
         score = F.softmax(score, dim=-1)
         score = self.att_drop(score)
